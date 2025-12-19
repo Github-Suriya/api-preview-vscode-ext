@@ -3,10 +3,15 @@
   "displayName": "API Preview",
   "description": "Preview API responses directly inside VS Code",
   "version": "0.0.1",
-  "publisher": "your-name",
+  "publisher": "Github-Suriya",
   "engines": {
     "vscode": "^1.85.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Github-Suriya/api-preview-vscode-ext"
+  },
+  "icon": "media/icon.png",
   "categories": ["Other"],
   "activationEvents": [
     "onCommand:apiPreview.open"
