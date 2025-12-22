@@ -1,373 +1,357 @@
 import * as vscode from 'vscode';
+import { ApiRequest } from './types';
 
 export class ApiPreviewPanel {
   static currentPanel: ApiPreviewPanel | undefined;
   private readonly panel: vscode.WebviewPanel;
+  private readonly extensionUri: vscode.Uri;
+  private _disposables: vscode.Disposable[] = [];
+
+  // Callback to save request back to sidebar
+  public static onSaveRequest: ((req: ApiRequest) => void) | undefined;
 
   static createOrShow(extensionUri: vscode.Uri) {
+    const column = vscode.window.activeTextEditor
+      ? vscode.window.activeTextEditor.viewColumn
+      : undefined;
+
     if (ApiPreviewPanel.currentPanel) {
-      ApiPreviewPanel.currentPanel.panel.reveal();
+      ApiPreviewPanel.currentPanel.panel.reveal(column);
       return;
     }
 
     const panel = vscode.window.createWebviewPanel(
       'apiPreview',
       'API Preview',
-      vscode.ViewColumn.One,
+      column || vscode.ViewColumn.One,
       {
         enableScripts: true,
+        localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')]
       }
     );
 
     ApiPreviewPanel.currentPanel = new ApiPreviewPanel(panel, extensionUri);
   }
 
+  // Load a specific request into the webview
+  static loadRequest(request: ApiRequest) {
+      if (!ApiPreviewPanel.currentPanel) {
+          // If panel is closed, create it first
+          // Note: In a real app you might need to pass extensionUri here via a singleton manager
+          // For now, we assume the user has opened it once or we rely on the command
+          return; 
+      }
+      ApiPreviewPanel.currentPanel.panel.reveal();
+      ApiPreviewPanel.currentPanel.panel.webview.postMessage({
+          type: 'load',
+          data: request
+      });
+  }
+
   private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
     this.panel = panel;
+    this.extensionUri = extensionUri;
 
-    this.panel.onDidDispose(() => {
-      ApiPreviewPanel.currentPanel = undefined;
-    });
+    this.panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
     this.panel.webview.onDidReceiveMessage(
       async (message) => {
-        if (message.type === 'fetch') {
-          try {
-            const response = await fetch(message.url, {
-              method: message.method || 'GET',
-              headers: message.headers || {},
-              body: message.body ? JSON.stringify(message.body) : undefined
-            });
-
-            const text = await response.text();
-            let data;
-
-            try {
-              data = JSON.parse(text);
-            } catch {
-              data = text;
-            }
-
-            this.panel.webview.postMessage({
-              type: 'response',
-              status: response.status,
-              data
-            });
-
-          } catch (error: any) {
-            this.panel.webview.postMessage({
-              type: 'error',
-              message: error.message
-            });
-          }
+        switch (message.type) {
+            case 'fetch':
+                this.handleFetch(message);
+                break;
+            case 'save':
+                if (ApiPreviewPanel.onSaveRequest) {
+                    ApiPreviewPanel.onSaveRequest(message.data);
+                    vscode.window.showInformationMessage(`Request saved: ${message.data.label}`);
+                }
+                break;
+            case 'info':
+                vscode.window.showInformationMessage(message.message);
+                break;
+            case 'error':
+                vscode.window.showErrorMessage(message.message);
+                break;
         }
-      }
+      },
+      null,
+      this._disposables
     );
 
     this.panel.webview.html = this.getHtml();
   }
-  
+
+  private async handleFetch(message: any) {
+    try {
+        const startTime = Date.now();
+        const response = await fetch(message.url, {
+            method: message.method || 'GET',
+            headers: message.headers || {},
+            body: ['GET', 'HEAD'].includes(message.method) ? undefined : JSON.stringify(message.body)
+        });
+        const endTime = Date.now();
+
+        const text = await response.text();
+        let data;
+        let isJson = false;
+
+        try {
+            data = JSON.parse(text);
+            isJson = true;
+        } catch {
+            data = text;
+        }
+
+        this.panel.webview.postMessage({
+            type: 'response',
+            status: response.status,
+            time: endTime - startTime,
+            size: new TextEncoder().encode(text).length,
+            data,
+            isJson
+        });
+
+    } catch (error: any) {
+        this.panel.webview.postMessage({
+            type: 'error',
+            message: error.message
+        });
+    }
+  }
+
+  public dispose() {
+    ApiPreviewPanel.currentPanel = undefined;
+    this.panel.dispose();
+    while (this._disposables.length) {
+      const x = this._disposables.pop();
+      if (x) {
+        x.dispose();
+      }
+    }
+  }
+
   private getHtml(): string {
-    return `
-<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Preview</title>
 <style>
   :root {
-    --bg-color: #1e1e1e;
-    --panel-bg: #252526;
-    --input-bg: #3c3c3c;
-    --border-color: #444;
-    --text-primary: #e0e0e0;
-    --text-secondary: #a0a0a0;
-    --accent-color: #0078d4; /* VS Code Blue / Postman-ish Blue */
-    --accent-hover: #026ec1;
-    --success-color: #4caf50;
-    --error-color: #f44336;
-    --font-mono: 'Menlo', 'Monaco', 'Courier New', monospace;
-    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --bg-color: var(--vscode-editor-background);
+    --panel-bg: var(--vscode-sideBar-background);
+    --input-bg: var(--vscode-input-background);
+    --input-fg: var(--vscode-input-foreground);
+    --border-color: var(--vscode-panel-border);
+    --text-primary: var(--vscode-editor-foreground);
+    --accent-color: var(--vscode-button-background);
+    --accent-hover: var(--vscode-button-hoverBackground);
+    --font-mono: var(--vscode-editor-font-family);
   }
-
-  * { box-sizing: border-box; }
-
-  body {
-    background-color: var(--bg-color);
-    color: var(--text-primary);
-    font-family: var(--font-sans);
-    margin: 0;
-    padding: 0;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  /* --- Top Bar (Method, URL, Send) --- */
-  .top-bar {
-    display: flex;
-    padding: 10px;
-    background-color: var(--panel-bg);
-    border-bottom: 1px solid var(--border-color);
-    gap: 8px;
-    align-items: center;
-  }
-
-  .method-select {
-    background-color: var(--input-bg);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    padding: 8px 12px;
-    border-radius: 4px;
-    font-weight: bold;
-    font-family: var(--font-mono);
-    cursor: pointer;
-    width: 100px;
-  }
-
-  .url-input {
-    flex-grow: 1;
-    background-color: var(--input-bg);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    padding: 8px 12px;
-    border-radius: 4px;
-    font-family: var(--font-mono);
-  }
-
-  .url-input:focus, .method-select:focus {
-    outline: 1px solid var(--accent-color);
-    border-color: var(--accent-color);
-  }
-
-  .send-btn {
-    background-color: var(--accent-color);
-    color: white;
-    border: none;
-    padding: 8px 24px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
-    transition: background 0.2s;
-  }
-
-  .send-btn:hover { background-color: var(--accent-hover); }
-
-  /* --- Main Split Area --- */
-  .container {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    overflow: hidden;
-  }
-
-  /* --- Tabs --- */
-  .tabs {
-    display: flex;
-    background-color: var(--panel-bg);
-    border-bottom: 1px solid var(--border-color);
-  }
-
-  .tab {
-    padding: 10px 20px;
-    cursor: pointer;
-    color: var(--text-secondary);
-    font-size: 0.9em;
-    border-bottom: 2px solid transparent;
-  }
-
-  .tab:hover { color: var(--text-primary); }
+  body { background: var(--bg-color); color: var(--text-primary); margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; }
   
-  .tab.active {
-    color: var(--text-primary);
-    border-bottom: 2px solid var(--accent-color);
-  }
+  /* Layout */
+  .top-bar { display: flex; gap: 8px; padding: 10px; background: var(--panel-bg); border-bottom: 1px solid var(--border-color); align-items: center; }
+  .container { display: flex; flex: 1; flex-direction: column; overflow: hidden; }
+  .split { display: flex; flex: 1; overflow: hidden; }
+  .pane { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); min-width: 200px; }
+  .pane:last-child { border-right: none; }
 
-  /* --- Input Area --- */
-  .input-section {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    padding: 10px;
-    min-height: 150px;
-    border-bottom: 1px solid var(--border-color);
-  }
+  /* Inputs */
+  select, input { background: var(--input-bg); color: var(--input-fg); border: 1px solid var(--border-color); padding: 6px; border-radius: 2px; outline: none; }
+  input { flex: 1; }
+  button { background: var(--accent-color); color: white; border: none; padding: 6px 14px; border-radius: 2px; cursor: pointer; }
+  button:hover { background: var(--accent-hover); }
+  button.secondary { background: transparent; border: 1px solid var(--border-color); }
 
-  .editor-wrapper {
-    display: none; /* Hidden by default */
-    flex-direction: column;
-    height: 100%;
-  }
+  /* Tabs */
+  .tabs { display: flex; background: var(--panel-bg); border-bottom: 1px solid var(--border-color); }
+  .tab { padding: 8px 16px; cursor: pointer; opacity: 0.7; font-size: 12px; }
+  .tab:hover { opacity: 1; background: rgba(255,255,255,0.05); }
+  .tab.active { opacity: 1; border-bottom: 2px solid var(--accent-color); font-weight: 600; }
 
+  /* Editors */
+  .editor-wrapper { flex: 1; display: none; position: relative; }
   .editor-wrapper.active { display: flex; }
+  textarea { width: 100%; height: 100%; background: var(--bg-color); color: #CE9178; border: none; resize: none; padding: 10px; font-family: var(--font-mono); outline: none; }
 
-  textarea.code-editor {
-    flex: 1;
-    background-color: #1e1e1e; /* Darker than panel */
-    color: #ce9178; /* JSON string color */
-    border: 1px solid var(--border-color);
-    padding: 10px;
-    font-family: var(--font-mono);
-    font-size: 13px;
-    resize: none;
-    outline: none;
-  }
-
-  textarea.code-editor:focus { border-color: #555; }
-
-  /* --- Response Area --- */
-  .response-section {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    background-color: var(--bg-color);
-    overflow: hidden;
-  }
-
-  .response-header {
-    padding: 8px 15px;
-    background-color: var(--panel-bg);
-    border-bottom: 1px solid var(--border-color);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.85em;
-    color: var(--text-secondary);
-  }
-
-  .status-badge {
-    font-weight: bold;
-    color: var(--text-primary);
-  }
-  .status-badge.success { color: var(--success-color); }
-  .status-badge.error { color: var(--error-color); }
-
-  .response-body {
-    flex: 1;
-    padding: 10px;
-    overflow: auto;
-    margin: 0;
-    color: #9cdcfe; /* VS Code Variable Blue */
-    font-family: var(--font-mono);
-    font-size: 13px;
-  }
+  /* Response */
+  .meta-bar { padding: 6px 10px; background: var(--panel-bg); font-size: 11px; display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); }
+  .status { font-weight: bold; }
+  .status.s-2 { color: #4caf50; }
+  .status.s-4, .status.s-5 { color: #f44336; }
+  
+  /* JSON Tree Viewer CSS */
+  .json-viewer { padding: 10px; overflow: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.5; }
+  details > summary { cursor: pointer; list-style: none; outline: none; }
+  details > summary::-webkit-details-marker { display: none; } /* Hide default triangle */
+  details > summary::before { content: '▶'; display: inline-block; font-size: 10px; margin-right: 5px; transform: rotate(0deg); transition: 0.1s; opacity: 0.7; }
+  details[open] > summary::before { transform: rotate(90deg); }
+  
+  .key { color: #9cdcfe; } /* Blue */
+  .string { color: #ce9178; } /* Orange */
+  .number { color: #b5cea8; } /* Green */
+  .boolean { color: #569cd6; } /* Dark Blue */
+  .null { color: #569cd6; }
 </style>
 </head>
 <body>
 
   <div class="top-bar">
-    <select id="method" class="method-select">
+    <select id="method">
       <option value="GET">GET</option>
       <option value="POST">POST</option>
       <option value="PUT">PUT</option>
       <option value="DELETE">DELETE</option>
       <option value="PATCH">PATCH</option>
     </select>
-    <input id="url" class="url-input" type="text" placeholder="Enter request URL" />
-    <button onclick="send()" class="send-btn">Send</button>
+    <input id="url" type="text" placeholder="https://api.example.com/users" />
+    <button onclick="send()" id="send-btn">Send</button>
+    <button class="secondary" onclick="save()" title="Save Request">💾</button>
   </div>
 
-  <div class="container">
-    
-    <div class="tabs">
-      <div class="tab active" onclick="switchTab('body')">Body</div>
-      <div class="tab" onclick="switchTab('headers')">Headers</div>
+  <div class="split">
+    <div class="pane" style="max-width: 40%;">
+       <div class="tabs">
+         <div class="tab active" onclick="switchTab('body')">Body</div>
+         <div class="tab" onclick="switchTab('headers')">Headers</div>
+       </div>
+       <div id="tab-body" class="editor-wrapper active">
+         <textarea id="body" placeholder='{ "key": "value" }'></textarea>
+       </div>
+       <div id="tab-headers" class="editor-wrapper">
+         <textarea id="headers" placeholder='{ "Content-Type": "application/json" }'></textarea>
+       </div>
     </div>
 
-    <div class="input-section">
-      
-      <div id="tab-body" class="editor-wrapper active">
-        <textarea id="body" class="code-editor" placeholder='{\n  "key": "value"\n}' spellcheck="false"></textarea>
+    <div class="pane">
+      <div class="meta-bar">
+        <span>Status: <span id="status">--</span></span>
+        <span>Time: <span id="time">0ms</span> | Size: <span id="size">0B</span></span>
       </div>
-
-      <div id="tab-headers" class="editor-wrapper">
-        <textarea id="headers" class="code-editor" placeholder='{\n  "Content-Type": "application/json",\n  "Authorization": "Bearer token"\n}' spellcheck="false"></textarea>
-      </div>
-
+      <div id="output" class="json-viewer"></div>
     </div>
-
-    <div class="response-section">
-      <div class="response-header">
-        <span>Response</span>
-        <span id="status-display" class="status-badge"></span>
-      </div>
-      <pre id="output" class="response-body">Hit 'Send' to see the response...</pre>
-    </div>
-
   </div>
 
 <script>
   const vscode = acquireVsCodeApi();
+  let currentRequestId = null;
 
-  // Handle Tab Switching
-  function switchTab(tabName) {
-    // Update Tab UI
+  function switchTab(name) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.editor-wrapper').forEach(e => e.classList.remove('active'));
     event.target.classList.add('active');
-
-    // Show/Hide Content
-    document.querySelectorAll('.editor-wrapper').forEach(w => w.classList.remove('active'));
-    document.getElementById('tab-' + tabName).classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
   }
 
-  // Handle Messages from Extension
-  window.addEventListener('message', event => {
-    const msg = event.data;
-    const output = document.getElementById('output');
-    const statusDisplay = document.getElementById('status-display');
+  // --- JSON Tree Renderer ---
+  function createJsonTree(data) {
+    if (data === null) return '<span class="null">null</span>';
+    if (typeof data === 'boolean') return '<span class="boolean">' + data + '</span>';
+    if (typeof data === 'number') return '<span class="number">' + data + '</span>';
+    if (typeof data === 'string') return '<span class="string">"' + data + '"</span>';
 
-    if (msg.type === 'response') {
-      // Status formatting
-      statusDisplay.textContent = 'Status: ' + msg.status;
-      statusDisplay.className = 'status-badge ' + (msg.status >= 200 && msg.status < 300 ? 'success' : 'error');
-
-      // Body formatting
-      output.textContent = JSON.stringify(msg.data, null, 2);
+    if (Array.isArray(data)) {
+        if (data.length === 0) return '[]';
+        let html = '<details open><summary>Array [' + data.length + ']</summary><div style="padding-left: 20px;">';
+        data.forEach(item => {
+            html += '<div>' + createJsonTree(item) + ',</div>';
+        });
+        html += '</div></details>';
+        return html;
     }
 
+    if (typeof data === 'object') {
+        if (Object.keys(data).length === 0) return '{}';
+        let html = '<details open><summary>Object</summary><div style="padding-left: 20px;">';
+        for (const key in data) {
+            html += '<div><span class="key">"' + key + '"</span>: ' + createJsonTree(data[key]) + ',</div>';
+        }
+        html += '</div></details>';
+        return html;
+    }
+  }
+
+  // --- Logic ---
+  window.addEventListener('message', event => {
+    const msg = event.data;
+    
+    // LOAD Request
+    if (msg.type === 'load') {
+        const req = msg.data;
+        currentRequestId = req.id;
+        document.getElementById('method').value = req.method;
+        document.getElementById('url').value = req.url;
+        document.getElementById('headers').value = req.headers || '';
+        document.getElementById('body').value = req.body || '';
+        // Auto trigger? Optional. Let's not auto-trigger, just fill.
+    }
+
+    // Response
+    if (msg.type === 'response') {
+        document.getElementById('send-btn').textContent = 'Send';
+        const st = document.getElementById('status');
+        st.textContent = msg.status;
+        st.className = 'status s-' + Math.floor(msg.status / 100);
+        
+        document.getElementById('time').textContent = msg.time + 'ms';
+        document.getElementById('size').textContent = msg.size + 'B';
+
+        const out = document.getElementById('output');
+        if (msg.isJson) {
+            out.innerHTML = createJsonTree(msg.data);
+        } else {
+            out.textContent = msg.data;
+        }
+    }
+    
     if (msg.type === 'error') {
-      statusDisplay.textContent = 'Error';
-      statusDisplay.className = 'status-badge error';
-      output.textContent = msg.message;
+        document.getElementById('send-btn').textContent = 'Send';
+        document.getElementById('output').innerHTML = '<span style="color:var(--vscode-errorForeground)">' + msg.message + '</span>';
     }
   });
 
-  // Send Logic
   function send() {
-    let headers = {};
-    let body = null;
-    const output = document.getElementById('output');
+    document.getElementById('send-btn').textContent = '...';
     
-    output.textContent = 'Loading...';
-    document.getElementById('status-display').textContent = '';
+    let headers = {}, body = null;
+    try {
+        const hVal = document.getElementById('headers').value;
+        if(hVal) headers = JSON.parse(hVal);
+    } catch(e) { vscode.postMessage({type: 'error', message: 'Invalid Headers JSON'}); return; }
 
     try {
-      const headersText = document.getElementById('headers').value.trim();
-      if(headersText) headers = JSON.parse(headersText);
-    } catch (e) {
-      alert('Invalid JSON in Headers');
-      return;
-    }
-
-    try {
-      const bodyText = document.getElementById('body').value.trim();
-      if(bodyText) body = JSON.parse(bodyText);
-    } catch (e) {
-      alert('Invalid JSON in Body');
-      return;
-    }
+        const bVal = document.getElementById('body').value;
+        if(bVal) body = JSON.parse(bVal);
+    } catch(e) { vscode.postMessage({type: 'error', message: 'Invalid Body JSON'}); return; }
 
     vscode.postMessage({
-      type: 'fetch',
-      method: document.getElementById('method').value,
-      url: document.getElementById('url').value,
-      headers,
-      body
+        type: 'fetch',
+        method: document.getElementById('method').value,
+        url: document.getElementById('url').value,
+        headers,
+        body
+    });
+  }
+
+  function save() {
+    const name = prompt("Enter a name for this request:"); // Note: Prompt doesn't work in VS Code webview easily. 
+    // We will send 'save' to extension, extension will open InputBox, then save.
+    
+    vscode.postMessage({
+        type: 'save',
+        data: {
+            id: currentRequestId || Date.now().toString(),
+            label: name || 'Untitled Request', // Extension will ask properly
+            method: document.getElementById('method').value,
+            url: document.getElementById('url').value,
+            headers: document.getElementById('headers').value,
+            body: document.getElementById('body').value
+        }
     });
   }
 </script>
-
 </body>
 </html>`;
   }

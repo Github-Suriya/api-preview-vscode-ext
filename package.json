@@ -2,7 +2,8 @@
   "name": "wad-api-preview",
   "displayName": "API Preview",
   "description": "Preview API responses directly inside VS Code",
-  "version": "0.0.1",
+  "keywords": ["api", "json", "rest", "postman", "preview"],
+  "version": "0.1.0",
   "publisher": "Github-Suriya",
   "engines": {
     "vscode": "^1.85.0"
@@ -12,18 +13,52 @@
     "url": "https://github.com/Github-Suriya/api-preview-vscode-ext"
   },
   "icon": "media/icon.png",
-  "categories": ["Other"],
+  "categories": [
+    "Other"
+  ],
   "activationEvents": [
-    "onCommand:apiPreview.open"
+    "onCommand:apiPreview.open",
+    "onView:apiPreviewSidebar"
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "api-preview-container",
+          "title": "API Preview",
+          "icon": "$(globe)"
+        }
+      ]
+    },
+    "views": {
+      "api-preview-container": [
+        {
+          "id": "apiPreviewSidebar",
+          "name": "Saved Requests"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "apiPreview.open",
-        "title": "API Preview: Open"
+        "title": "API Preview: Open New Request"
+      },
+      {
+        "command": "apiPreview.deleteRequest",
+        "title": "Delete",
+        "icon": "$(trash)"
       }
-    ]
+    ],
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "apiPreview.deleteRequest",
+          "when": "view == apiPreviewSidebar",
+          "group": "inline"
+        }
+      ]
+    }
   },
   "scripts": {
     "compile": "node esbuild.js",
