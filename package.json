@@ -2,8 +2,14 @@
   "name": "wad-api-preview",
   "displayName": "API Preview",
   "description": "Preview API responses directly inside VS Code",
-  "keywords": ["api", "json", "rest", "postman", "preview"],
-  "version": "0.1.0",
+  "keywords": [
+    "api",
+    "json",
+    "rest",
+    "postman",
+    "preview"
+  ],
+  "version": "0.1.1",
   "publisher": "Github-Suriya",
   "engines": {
     "vscode": "^1.85.0"
