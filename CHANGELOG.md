@@ -2,7 +2,7 @@
 
 All notable changes to the "API Preview" extension will be documented in this file.
 
-## [0.2.0] - 2025-12-23
+## [0.3.0] - 2025-12-23
 ### Added
 - **Environment Variables Support**: You can now define variables in your VS Code settings (`apiPreview.variables`) and use them in your requests (e.g., `{{baseUrl}}/api/v1`).
 - **Sidebar "New Request" Button**: Added a `+` icon in the "Saved Requests" view title to quickly open a blank request panel.
