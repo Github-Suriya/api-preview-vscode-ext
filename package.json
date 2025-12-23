@@ -9,7 +9,7 @@
     "postman",
     "preview"
   ],
-  "version": "0.1.3",
+  "version": "0.1.4",
   "publisher": "Github-Suriya",
   "engines": {
     "vscode": "^1.85.0"
