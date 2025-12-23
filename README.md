@@ -3,7 +3,6 @@
 **API Preview** is a lightweight, integrated REST API client for Visual Studio Code. Test HTTP requests, inspect JSON responses, and manage your API history without leaving your editor.
 
 ![API Preview Screenshot](media/screenshot.png)
-*(Add a screenshot of your extension in action here)*
 
 ## ✨ Features
 
