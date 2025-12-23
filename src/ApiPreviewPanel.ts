@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ApiRequest } from './types';
+import { VariableProcessor } from './VariableProcessor';
 
 export class ApiPreviewPanel {
   static currentPanel: ApiPreviewPanel | undefined;
@@ -7,7 +8,6 @@ export class ApiPreviewPanel {
   private readonly extensionUri: vscode.Uri;
   private _disposables: vscode.Disposable[] = [];
 
-  // Callback to save request back to sidebar
   public static onSaveRequest: ((req: ApiRequest) => void) | undefined;
 
   static createOrShow(extensionUri: vscode.Uri) {
@@ -17,6 +17,10 @@ export class ApiPreviewPanel {
 
     if (ApiPreviewPanel.currentPanel) {
       ApiPreviewPanel.currentPanel.panel.reveal(column);
+      // If triggered by "+" button (apiPreview.open), we might want to clear.
+      // We'll handle explicit clearing via a separate public method if needed, 
+      // but usually 'open' just shows it. 
+      // See extension.ts for how we call reset.
       return;
     }
 
@@ -26,21 +30,23 @@ export class ApiPreviewPanel {
       column || vscode.ViewColumn.One,
       {
         enableScripts: true,
-        localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')]
+        localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')],
+        retainContextWhenHidden: true // Keep state when switching tabs
       }
     );
 
     ApiPreviewPanel.currentPanel = new ApiPreviewPanel(panel, extensionUri);
   }
 
-  // Load a specific request into the webview
+  // New: Reset the form to blank
+  static reset() {
+    if (ApiPreviewPanel.currentPanel) {
+        ApiPreviewPanel.currentPanel.panel.webview.postMessage({ type: 'clear' });
+    }
+  }
+
   static loadRequest(request: ApiRequest) {
-      if (!ApiPreviewPanel.currentPanel) {
-          // If panel is closed, create it first
-          // Note: In a real app you might need to pass extensionUri here via a singleton manager
-          // For now, we assume the user has opened it once or we rely on the command
-          return; 
-      }
+      if (!ApiPreviewPanel.currentPanel) { return; }
       ApiPreviewPanel.currentPanel.panel.reveal();
       ApiPreviewPanel.currentPanel.panel.webview.postMessage({
           type: 'load',
@@ -63,11 +69,7 @@ export class ApiPreviewPanel {
             case 'save':
                 if (ApiPreviewPanel.onSaveRequest) {
                     ApiPreviewPanel.onSaveRequest(message.data);
-                    vscode.window.showInformationMessage(`Request saved: ${message.data.label}`);
                 }
-                break;
-            case 'info':
-                vscode.window.showInformationMessage(message.message);
                 break;
             case 'error':
                 vscode.window.showErrorMessage(message.message);
@@ -83,11 +85,26 @@ export class ApiPreviewPanel {
 
   private async handleFetch(message: any) {
     try {
+        // --- VARIABLE REPLACEMENT START ---
+        const finalUrl = VariableProcessor.process(message.url);
+        const finalHeaders = VariableProcessor.processObject(message.headers || {});
+        
+        let finalBody = message.body;
+        // If body is an object, stringify first to replace vars, then parse back if needed? 
+        // Actually fetch() takes body as string usually for custom calls.
+        // But our UI sends JSON object. 
+        if (message.body && typeof message.body === 'object') {
+            const bodyStr = JSON.stringify(message.body);
+            const processedBodyStr = VariableProcessor.process(bodyStr);
+            finalBody = JSON.parse(processedBodyStr);
+        }
+        // --- VARIABLE REPLACEMENT END ---
+
         const startTime = Date.now();
-        const response = await fetch(message.url, {
+        const response = await fetch(finalUrl, {
             method: message.method || 'GET',
-            headers: message.headers || {},
-            body: ['GET', 'HEAD'].includes(message.method) ? undefined : JSON.stringify(message.body)
+            headers: finalHeaders,
+            body: ['GET', 'HEAD'].includes(message.method) ? undefined : JSON.stringify(finalBody)
         });
         const endTime = Date.now();
 
@@ -124,9 +141,7 @@ export class ApiPreviewPanel {
     this.panel.dispose();
     while (this._disposables.length) {
       const x = this._disposables.pop();
-      if (x) {
-        x.dispose();
-      }
+      if (x) x.dispose();
     }
   }
 
@@ -151,49 +166,36 @@ export class ApiPreviewPanel {
   }
   body { background: var(--bg-color); color: var(--text-primary); margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; }
   
-  /* Layout */
   .top-bar { display: flex; gap: 8px; padding: 10px; background: var(--panel-bg); border-bottom: 1px solid var(--border-color); align-items: center; }
-  .container { display: flex; flex: 1; flex-direction: column; overflow: hidden; }
   .split { display: flex; flex: 1; overflow: hidden; }
   .pane { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); min-width: 200px; }
   .pane:last-child { border-right: none; }
 
-  /* Inputs */
   select, input { background: var(--input-bg); color: var(--input-fg); border: 1px solid var(--border-color); padding: 6px; border-radius: 2px; outline: none; }
   input { flex: 1; }
   button { background: var(--accent-color); color: white; border: none; padding: 6px 14px; border-radius: 2px; cursor: pointer; }
   button:hover { background: var(--accent-hover); }
-  button.secondary { background: transparent; border: 1px solid var(--border-color); }
+  button.secondary { background: transparent; border: 1px solid var(--border-color); width: 32px; padding: 6px 0; text-align: center; }
 
-  /* Tabs */
   .tabs { display: flex; background: var(--panel-bg); border-bottom: 1px solid var(--border-color); }
   .tab { padding: 8px 16px; cursor: pointer; opacity: 0.7; font-size: 12px; }
-  .tab:hover { opacity: 1; background: rgba(255,255,255,0.05); }
   .tab.active { opacity: 1; border-bottom: 2px solid var(--accent-color); font-weight: 600; }
 
-  /* Editors */
-  .editor-wrapper { flex: 1; display: none; position: relative; }
+  .editor-wrapper { flex: 1; display: none; }
   .editor-wrapper.active { display: flex; }
   textarea { width: 100%; height: 100%; background: var(--bg-color); color: #CE9178; border: none; resize: none; padding: 10px; font-family: var(--font-mono); outline: none; }
 
-  /* Response */
   .meta-bar { padding: 6px 10px; background: var(--panel-bg); font-size: 11px; display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); }
   .status { font-weight: bold; }
   .status.s-2 { color: #4caf50; }
   .status.s-4, .status.s-5 { color: #f44336; }
   
-  /* JSON Tree Viewer CSS */
   .json-viewer { padding: 10px; overflow: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.5; }
-  details > summary { cursor: pointer; list-style: none; outline: none; }
-  details > summary::-webkit-details-marker { display: none; } /* Hide default triangle */
-  details > summary::before { content: '▶'; display: inline-block; font-size: 10px; margin-right: 5px; transform: rotate(0deg); transition: 0.1s; opacity: 0.7; }
+  details > summary { cursor: pointer; outline: none; list-style: none; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before { content: '▶'; display: inline-block; font-size: 10px; margin-right: 5px; opacity: 0.7; transition: 0.1s; }
   details[open] > summary::before { transform: rotate(90deg); }
-  
-  .key { color: #9cdcfe; } /* Blue */
-  .string { color: #ce9178; } /* Orange */
-  .number { color: #b5cea8; } /* Green */
-  .boolean { color: #569cd6; } /* Dark Blue */
-  .null { color: #569cd6; }
+  .key { color: #9cdcfe; } .string { color: #ce9178; } .number { color: #b5cea8; } .boolean { color: #569cd6; } .null { color: #569cd6; }
 </style>
 </head>
 <body>
@@ -206,7 +208,7 @@ export class ApiPreviewPanel {
       <option value="DELETE">DELETE</option>
       <option value="PATCH">PATCH</option>
     </select>
-    <input id="url" type="text" placeholder="https://api.example.com/users" />
+    <input id="url" type="text" placeholder="{{baseUrl}}/api/users" />
     <button onclick="send()" id="send-btn">Send</button>
     <button class="secondary" onclick="save()" title="Save Request">💾</button>
   </div>
@@ -218,10 +220,10 @@ export class ApiPreviewPanel {
          <div class="tab" onclick="switchTab('headers')">Headers</div>
        </div>
        <div id="tab-body" class="editor-wrapper active">
-         <textarea id="body" placeholder='{ "key": "value" }'></textarea>
+         <textarea id="body" placeholder='{ "key": "{{variable}}" }'></textarea>
        </div>
        <div id="tab-headers" class="editor-wrapper">
-         <textarea id="headers" placeholder='{ "Content-Type": "application/json" }'></textarea>
+         <textarea id="headers" placeholder='{ "Authorization": "Bearer {{token}}" }'></textarea>
        </div>
     </div>
 
@@ -245,38 +247,41 @@ export class ApiPreviewPanel {
     document.getElementById('tab-' + name).classList.add('active');
   }
 
-  // --- JSON Tree Renderer ---
   function createJsonTree(data) {
     if (data === null) return '<span class="null">null</span>';
     if (typeof data === 'boolean') return '<span class="boolean">' + data + '</span>';
     if (typeof data === 'number') return '<span class="number">' + data + '</span>';
     if (typeof data === 'string') return '<span class="string">"' + data + '"</span>';
-
     if (Array.isArray(data)) {
         if (data.length === 0) return '[]';
         let html = '<details open><summary>Array [' + data.length + ']</summary><div style="padding-left: 20px;">';
-        data.forEach(item => {
-            html += '<div>' + createJsonTree(item) + ',</div>';
-        });
+        data.forEach(item => html += '<div>' + createJsonTree(item) + ',</div>');
         html += '</div></details>';
         return html;
     }
-
     if (typeof data === 'object') {
         if (Object.keys(data).length === 0) return '{}';
         let html = '<details open><summary>Object</summary><div style="padding-left: 20px;">';
-        for (const key in data) {
-            html += '<div><span class="key">"' + key + '"</span>: ' + createJsonTree(data[key]) + ',</div>';
-        }
+        for (const key in data) html += '<div><span class="key">"' + key + '"</span>: ' + createJsonTree(data[key]) + ',</div>';
         html += '</div></details>';
         return html;
     }
   }
 
-  // --- Logic ---
   window.addEventListener('message', event => {
     const msg = event.data;
     
+    // RESET
+    if (msg.type === 'clear') {
+        currentRequestId = null;
+        document.getElementById('method').value = 'GET';
+        document.getElementById('url').value = '';
+        document.getElementById('headers').value = '';
+        document.getElementById('body').value = '';
+        document.getElementById('output').innerHTML = '';
+        document.getElementById('status').textContent = '--';
+    }
+
     // LOAD Request
     if (msg.type === 'load') {
         const req = msg.data;
@@ -285,7 +290,6 @@ export class ApiPreviewPanel {
         document.getElementById('url').value = req.url;
         document.getElementById('headers').value = req.headers || '';
         document.getElementById('body').value = req.body || '';
-        // Auto trigger? Optional. Let's not auto-trigger, just fill.
     }
 
     // Response
@@ -294,16 +298,10 @@ export class ApiPreviewPanel {
         const st = document.getElementById('status');
         st.textContent = msg.status;
         st.className = 'status s-' + Math.floor(msg.status / 100);
-        
         document.getElementById('time').textContent = msg.time + 'ms';
         document.getElementById('size').textContent = msg.size + 'B';
-
         const out = document.getElementById('output');
-        if (msg.isJson) {
-            out.innerHTML = createJsonTree(msg.data);
-        } else {
-            out.textContent = msg.data;
-        }
+        out.innerHTML = msg.isJson ? createJsonTree(msg.data) : msg.data;
     }
     
     if (msg.type === 'error') {
@@ -314,7 +312,6 @@ export class ApiPreviewPanel {
 
   function send() {
     document.getElementById('send-btn').textContent = '...';
-    
     let headers = {}, body = null;
     try {
         const hVal = document.getElementById('headers').value;
@@ -336,14 +333,12 @@ export class ApiPreviewPanel {
   }
 
   function save() {
-    const name = prompt("Enter a name for this request:"); // Note: Prompt doesn't work in VS Code webview easily. 
-    // We will send 'save' to extension, extension will open InputBox, then save.
-    
+    // Basic prompts are annoying in webviews, so we delegate name asking to the extension
     vscode.postMessage({
         type: 'save',
         data: {
             id: currentRequestId || Date.now().toString(),
-            label: name || 'Untitled Request', // Extension will ask properly
+            label: 'Untitled Request', 
             method: document.getElementById('method').value,
             url: document.getElementById('url').value,
             headers: document.getElementById('headers').value,

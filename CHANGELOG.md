@@ -1,9 +1,33 @@
 # Change Log
 
-All notable changes to the "apiPreview" extension will be documented in this file.
+All notable changes to the "API Preview" extension will be documented in this file.
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+## [0.2.0] - 2025-12-23
+### Added
+- **Environment Variables Support**: You can now define variables in your VS Code settings (`apiPreview.variables`) and use them in your requests (e.g., `{{baseUrl}}/api/v1`).
+- **Sidebar "New Request" Button**: Added a `+` icon in the "Saved Requests" view title to quickly open a blank request panel.
+- **Variable Processor**: Automatically parses and replaces `{{variable}}` syntax in URLs, Headers, and JSON Bodies before sending.
 
-## [Unreleased]
+### Changed
+- Improved the "Save Request" workflow to allow updating existing requests or creating new ones with unique IDs.
+- Refactored `ApiPreviewPanel` to separate UI logic from variable processing logic.
 
-- Initial release
+## [0.1.5] - 2025-12-20
+### Added
+- **Sidebar History**: Introduced the "Saved Requests" view in the Activity Bar to manage your API history.
+- **JSON Tree Viewer**: Responses are now rendered in a collapsible, color-coded JSON tree for better readability.
+- **Workspace Persistence**: Saved requests are now stored in the Workspace State, persisting across VS Code reloads.
+- **One-Click Loading**: Clicking a request in the sidebar instantly loads the Method, URL, Headers, and Body into the preview panel.
+- **Status Indicators**: Added visual badges for HTTP Status codes (Green for 2xx, Red for 4xx/5xx).
+- **Performance Metrics**: Added Response Time (ms) and Response Size (bytes) indicators.
+
+### Fixed
+- Fixed layout issues where the response area would not scroll independently of the input area.
+- Improved error handling for invalid JSON in the Request Body tab.
+
+## [0.0.1] - 2025-12-18
+### Initial Release
+- Basic HTTP Request functionality (GET, POST, PUT, DELETE, PATCH).
+- Dual-tab interface for Request Body and Headers.
+- Raw JSON response viewer.
+- Simple "Send" and "Reset" functionality.

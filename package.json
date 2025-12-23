@@ -2,26 +2,11 @@
   "name": "wad-api-preview",
   "displayName": "API Preview",
   "description": "Preview API responses directly inside VS Code",
-  "keywords": [
-    "api",
-    "json",
-    "rest",
-    "postman",
-    "preview"
-  ],
-  "version": "0.1.5",
+  "version": "0.2.0",
   "publisher": "Github-Suriya",
   "engines": {
     "vscode": "^1.85.0"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Github-Suriya/api-preview-vscode-ext"
-  },
-  "icon": "media/icon-min.png",
-  "categories": [
-    "Other"
-  ],
   "activationEvents": [
     "onCommand:apiPreview.open",
     "onView:apiPreviewSidebar"
@@ -48,7 +33,8 @@
     "commands": [
       {
         "command": "apiPreview.open",
-        "title": "API Preview: Open New Request"
+        "title": "New Request",
+        "icon": "$(add)"
       },
       {
         "command": "apiPreview.deleteRequest",
@@ -57,6 +43,13 @@
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "apiPreview.open",
+          "group": "navigation",
+          "when": "view == apiPreviewSidebar"
+        }
+      ],
       "view/item/context": [
         {
           "command": "apiPreview.deleteRequest",
@@ -64,6 +57,19 @@
           "group": "inline"
         }
       ]
+    },
+    "configuration": {
+      "title": "API Preview",
+      "properties": {
+        "apiPreview.variables": {
+          "type": "object",
+          "default": {
+            "baseUrl": "http://localhost:3000",
+            "token": "my-secret-token"
+          },
+          "description": "Global variables to use in requests. Access them using {{variableName}}."
+        }
+      }
     }
   },
   "scripts": {

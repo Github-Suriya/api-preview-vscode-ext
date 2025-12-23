@@ -5,39 +5,41 @@ import { ApiRequest } from './types';
 
 export function activate(context: vscode.ExtensionContext) {
     
-    // 1. Initialize History Provider
     const historyProvider = new HistoryProvider(context);
     vscode.window.registerTreeDataProvider('apiPreviewSidebar', historyProvider);
 
-    // 2. Open Panel Command
+    // 1. OPEN / NEW REQUEST Command
     context.subscriptions.push(
         vscode.commands.registerCommand('apiPreview.open', () => {
-            ApiPreviewPanel.createOrShow(context.extensionUri);
-        })
-    );
-
-    // 3. Load Request Command (from Sidebar Click)
-    context.subscriptions.push(
-        vscode.commands.registerCommand('apiPreview.loadRequest', async (request: ApiRequest) => {
-            // Ensure panel is open
-            ApiPreviewPanel.createOrShow(context.extensionUri);
-            // Send data to panel
+            // If panel exists, just reset it to blank (Like clicking "+" tab)
             if (ApiPreviewPanel.currentPanel) {
-                ApiPreviewPanel.loadRequest(request);
+                ApiPreviewPanel.reset();
+                // We also reveal it in case it was hidden
+                ApiPreviewPanel.createOrShow(context.extensionUri);
+            } else {
+                // Otherwise create new
+                ApiPreviewPanel.createOrShow(context.extensionUri);
             }
         })
     );
 
-    // 4. Delete Request Command (from Context Menu)
+    // 2. Load Request
+    context.subscriptions.push(
+        vscode.commands.registerCommand('apiPreview.loadRequest', async (request: ApiRequest) => {
+            ApiPreviewPanel.createOrShow(context.extensionUri);
+            ApiPreviewPanel.loadRequest(request);
+        })
+    );
+
+    // 3. Delete Request
     context.subscriptions.push(
         vscode.commands.registerCommand('apiPreview.deleteRequest', (request: ApiRequest) => {
             historyProvider.deleteRequest(request);
         })
     );
 
-    // 5. Handle "Save" event from Webview
+    // 4. Save Logic
     ApiPreviewPanel.onSaveRequest = async (requestData) => {
-        // Ask user for a name
         const label = await vscode.window.showInputBox({
             prompt: 'Enter a name for this request',
             placeHolder: 'e.g., Get All Users',
@@ -48,10 +50,10 @@ export function activate(context: vscode.ExtensionContext) {
             const newRequest: ApiRequest = {
                 ...requestData,
                 label: label,
-                // Ensure unique ID if saving as new
                 id: requestData.id || Date.now().toString()
             };
             historyProvider.addRequest(newRequest);
+            vscode.window.showInformationMessage(`Request saved: ${label}`);
         }
     };
 }
