@@ -2,7 +2,7 @@
   "name": "wad-api-preview",
   "displayName": "API Preview",
   "description": "Preview API responses directly inside VS Code",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "Github-Suriya",
   "engines": {
     "vscode": "^1.85.0"
