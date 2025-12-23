@@ -12,6 +12,21 @@
     "onView:apiPreviewSidebar"
   ],
   "main": "./dist/extension.js",
+  "keywords": [
+    "api",
+    "json",
+    "rest",
+    "postman",
+    "preview"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Github-Suriya/api-preview-vscode-ext"
+  },
+  "icon": "media/icon-min.png",
+  "categories": [
+    "Other"
+  ],
   "contributes": {
     "viewsContainers": {
       "activitybar": [
