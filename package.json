@@ -2,7 +2,7 @@
   "name": "wad-api-preview",
   "displayName": "API Preview",
   "description": "Preview API responses directly inside VS Code",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "publisher": "Github-Suriya",
   "engines": {
     "vscode": "^1.85.0"
@@ -30,12 +30,19 @@
   "contributes": {
     "viewsContainers": {
       "activitybar": [
-        { "id": "api-preview-container", "title": "API Preview", "icon": "$(globe)" }
+        {
+          "id": "api-preview-container",
+          "title": "API Preview",
+          "icon": "$(globe)"
+        }
       ]
     },
     "views": {
       "api-preview-container": [
-        { "id": "apiPreviewSidebar", "name": "Saved Requests" }
+        {
+          "id": "apiPreviewSidebar",
+          "name": "Saved Requests"
+        }
       ]
     },
     "commands": [
