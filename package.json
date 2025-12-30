@@ -30,19 +30,12 @@
   "contributes": {
     "viewsContainers": {
       "activitybar": [
-        {
-          "id": "api-preview-container",
-          "title": "API Preview",
-          "icon": "$(globe)"
-        }
+        { "id": "api-preview-container", "title": "API Preview", "icon": "$(globe)" }
       ]
     },
     "views": {
       "api-preview-container": [
-        {
-          "id": "apiPreviewSidebar",
-          "name": "Saved Requests"
-        }
+        { "id": "apiPreviewSidebar", "name": "Saved Requests" }
       ]
     },
     "commands": [
@@ -52,7 +45,12 @@
         "icon": "$(add)"
       },
       {
-        "command": "apiPreview.deleteRequest",
+        "command": "apiPreview.createFolder",
+        "title": "New Folder",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "apiPreview.deleteItem",
         "title": "Delete",
         "icon": "$(trash)"
       }
@@ -63,11 +61,16 @@
           "command": "apiPreview.open",
           "group": "navigation",
           "when": "view == apiPreviewSidebar"
+        },
+        {
+          "command": "apiPreview.createFolder",
+          "group": "navigation",
+          "when": "view == apiPreviewSidebar"
         }
       ],
       "view/item/context": [
         {
-          "command": "apiPreview.deleteRequest",
+          "command": "apiPreview.deleteItem",
           "when": "view == apiPreviewSidebar",
           "group": "inline"
         }

@@ -2,6 +2,15 @@
 
 All notable changes to the "API Preview" extension will be documented in this file.
 
+## [0.3.3] - 2025-12-30
+### Added
+- **Folder Support**: You can now organize your saved requests into folders for better project structure.
+
+### Changed
+- **UI Overhaul**: Switched from a side-by-side layout to a **Top-Bottom Split Layout** (Postman-style) for better usability on smaller screens.
+- **Resizable Panes**: Added a draggable handle between the Request and Response sections, allowing users to adjust the height of the editor area.
+- **Responsive Design**: The response pane now takes up the full width at the bottom, making large JSON responses easier to read.
+
 ## [0.3.0] - 2025-12-23
 ### Added
 - **Environment Variables Support**: You can now define variables in your VS Code settings (`apiPreview.variables`) and use them in your requests (e.g., `{{baseUrl}}/api/v1`).
